@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Frame</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #111; color: #f4f1ea; font: 22px/1.3 Georgia, serif; }
+    #whisper { position: fixed; top: 18px; right: 18px; display: none; align-items: center; gap: 10px; max-width: 46vw; }
+    #whisper.on { display: flex; }
+    #bead { width: 14px; height: 14px; border-radius: 50%; background: #e2b657; flex: none; }
+    #whisper p { margin: 0; font-size: 18px; }
+    #card { position: fixed; inset: 0; display: none; place-items: center; background: rgba(0, 0, 0, 0.45); }
+    #card.on { display: grid; }
+    #card article { width: min(640px, calc(100% - 48px)); padding: 28px 32px; background: #1c1c1c; border: 8px solid #e2b657; border-radius: 16px; }
+    #card.urgent article { border-color: #1c1c1c; box-shadow: inset 14px 0 0 #d64545; }
+    #card h1 { margin: 0 0 8px; font: 15px/1.2 sans-serif; letter-spacing: 0.08em; text-transform: uppercase; color: #e2b657; }
+    #card.urgent h1 { color: #d64545; }
+    #card p { margin: 0; font-size: 32px; }
+    #card small { display: block; margin-top: 16px; font: 14px/1.2 sans-serif; color: #b9b3a6; }
+  </style>
+</head>
+<body>
+  <div id="whisper"><span id="bead"></span><p></p></div>
+  <div id="card"><article><h1></h1><p></p><small>Tap to dismiss</small></article></div>
+  <script>
+    const whisper = document.getElementById('whisper');
+    const card = document.getElementById('card');
+    let current = null;
+
+    function show(alerts) {
+      const byLevel = {};
+      for (const alert of alerts || []) if (!byLevel[alert.level]) byLevel[alert.level] = alert;
+      const top = byLevel.urgent || byLevel.nudge || null;
+      const quiet = byLevel.whisper || null;
+      if (top) {
+        card.className = 'on ' + top.level;
+        card.querySelector('h1').textContent = top.source || top.level;
+        card.querySelector('p').textContent = top.text;
+        current = top.id;
+      } else {
+        card.className = '';
+        current = null;
+      }
+      if (quiet && !top) {
+        whisper.className = 'on';
+        whisper.querySelector('p').textContent = quiet.text;
+        current = quiet.id;
+      } else {
+        whisper.className = '';
+      }
+    }
+
+    async function poll() {
+      try {
+        const body = await fetch('/api/alerts', { cache: 'no-store' }).then((res) => res.json());
+        show(body.alerts);
+      } catch (err) { /* keep the last paint */ }
+    }
+
+    card.addEventListener('click', dismiss);
+    whisper.addEventListener('click', dismiss);
+
+    function dismiss() {
+      if (!current) return;
+      const id = current;
+      current = null;
+      card.className = '';
+      whisper.className = '';
+      fetch('/api/alerts/dismiss', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+    }
+
+    poll();
+    setInterval(poll, 10000);
+  </script>
+</body>
+</html>
